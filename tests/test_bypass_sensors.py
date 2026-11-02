@@ -73,13 +73,16 @@ async def test_closed_sensor_is_bypassed_until_disarm(
         assert _bypassed(hass) == [BEDROOM]
 
         # opening the bypassed sensor does not trigger
+        # (sensor events are handled on a timer: let it run before checking)
         hass.states.async_set(BEDROOM, "on")
         await hass.async_block_till_done()
+        await advance_time(hass, 1)
         assert_alarm_state(hass, ALARM, "armed_home")
 
         # a sensor that was not bypassed still triggers
         hass.states.async_set(WINDOW, "on")
         await hass.async_block_till_done()
+        await advance_time(hass, 1)
         assert hass.states.get(ALARM).state in ("pending", "triggered")
 
         await hass.services.async_call(
