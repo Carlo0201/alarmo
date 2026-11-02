@@ -1,6 +1,20 @@
 # Alarmo
 [![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
 
+> **Fork of [nielsfaber/alarmo](https://github.com/nielsfaber/alarmo)** with one addition: the `alarmo.arm` service accepts `bypass_sensors`, a list of sensors to exclude for that arming only, open or closed. They are ignored while armed (also after the exit delay) and watched again after disarming. Everything else is the original Alarmo.
+>
+> ```yaml
+> action: alarmo.arm
+> data:
+>   entity_id: alarm_control_panel.alarmo
+>   mode: away
+>   code: "1234"
+>   bypass_sensors:
+>     - binary_sensor.bedroom_window
+> ```
+>
+> Install through HACS as a custom repository (`Carlo0201/alarmo`, category Integration) in place of the original Alarmo; the configuration is kept.
+
 This is an alarm system integration for Home Assistant. It provides a user interface for setting up your own alarm system completely from the browser.
 
 - [Alarmo](#alarmo)
