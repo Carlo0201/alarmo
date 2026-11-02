@@ -23,6 +23,10 @@
         "force": {
           "name": "Force",
           "description": "Automatically bypass all sensors that prevent the arming operation."
+        },
+        "bypass_sensors": {
+          "name": "Bypass sensors",
+          "description": "Sensors to bypass for this arming, open or closed. They become active again when disarmed."
         }
       }
     },

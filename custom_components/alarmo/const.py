@@ -142,6 +142,7 @@ ATTR_COMMAND_PAYLOAD = "command_payload"
 ATTR_FORCE = "force"
 ATTR_SKIP_DELAY = "skip_delay"
 ATTR_CONTEXT_ID = "context_id"
+ATTR_BYPASS_SENSORS = "bypass_sensors"
 
 PUSH_EVENT = "mobile_app_notification_action"
 
@@ -207,6 +208,7 @@ SERVICE_ARM_SCHEMA = cv.make_entity_service_schema(
         ),
         vol.Optional(ATTR_SKIP_DELAY, default=False): cv.boolean,
         vol.Optional(ATTR_FORCE, default=False): cv.boolean,
+        vol.Optional(ATTR_BYPASS_SENSORS, default=list): cv.entity_ids,
         vol.Optional(ATTR_CONTEXT_ID): int,
     }
 )

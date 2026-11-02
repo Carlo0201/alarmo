@@ -23,6 +23,10 @@
         "force": {
           "name": "Forzare",
           "description": "Ignorare automaticamente tutti i sensori che prevengono l'inserimento dell'allarme."
+        },
+        "bypass_sensors": {
+          "name": "Sensori da escludere",
+          "description": "Sensori da escludere per questo inserimento, aperti o chiusi. Tornano attivi al disinserimento."
         }
       }
     },

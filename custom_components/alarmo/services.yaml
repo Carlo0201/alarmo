@@ -38,6 +38,12 @@ arm:
       default: false
       selector:
         boolean:
+    bypass_sensors:
+      example: "binary_sensor.bedroom_window"
+      required: false
+      selector:
+        entity:
+          multiple: true
 disarm:
   fields:
     entity_id:

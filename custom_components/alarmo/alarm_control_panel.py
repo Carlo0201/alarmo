@@ -170,6 +170,8 @@ class AlarmoBaseEntity(AlarmControlPanelEntity, RestoreEntity):
         self._open_sensors = {}
         self._bypass_open_sensors = False
         self._bypassed_sensors = []
+        # sensors requested via alarmo.arm bypass_sensors, kept until disarm
+        self._bypass_sensors = []
         self._delay = None
         self.expiration = None
         self.area_id = None
@@ -285,6 +287,10 @@ class AlarmoBaseEntity(AlarmControlPanelEntity, RestoreEntity):
             self._bypassed_sensors = value
         elif not value:
             self._bypassed_sensors = None
+        if not value:
+            # clearing the bypass list (disarm, new arm request) also ends the
+            # sensors requested via bypass_sensors
+            self._bypass_sensors = []
 
     @property
     def delay(self):
@@ -495,7 +501,7 @@ class AlarmoBaseEntity(AlarmControlPanelEntity, RestoreEntity):
         self.hass.async_create_task(self.async_alarm_disarm(code=code, **kwargs))
 
     async def async_service_arm_handler(
-        self, code, mode, skip_delay, force, context_id=None
+        self, code, mode, skip_delay, force, bypass_sensors=None, context_id=None
     ):
         """Handle external arm request from alarmo.arm service."""
         _LOGGER.debug("Service alarmo.arm was called")
@@ -508,6 +514,7 @@ class AlarmoBaseEntity(AlarmControlPanelEntity, RestoreEntity):
             code=code,
             skip_delay=skip_delay,
             bypass_open_sensors=force,
+            bypass_sensors=bypass_sensors or [],
             context_id=context_id,
         )
 
@@ -517,6 +524,7 @@ class AlarmoBaseEntity(AlarmControlPanelEntity, RestoreEntity):
         skip_code = kwargs.get("skip_code", False)
         skip_delay = kwargs.get(const.ATTR_SKIP_DELAY, False)
         bypass_open_sensors = kwargs.get("bypass_open_sensors", False)
+        bypass_sensors = kwargs.get(const.ATTR_BYPASS_SENSORS, [])
         context_id = kwargs.get("context_id", None)
 
         if (
@@ -598,6 +606,7 @@ class AlarmoBaseEntity(AlarmControlPanelEntity, RestoreEntity):
             arm_mode,
             skip_delay=skip_delay,
             bypass_open_sensors=bypass_open_sensors,
+            bypass_sensors=bypass_sensors,
             context_id=context_id,
         )
 
@@ -750,6 +759,28 @@ class AlarmoAreaEntity(AlarmoBaseEntity):
         coordinator = self.hass.data[const.DOMAIN]["coordinator"]
         self._config = coordinator.store.async_get_config()
         self._config.update(coordinator.store.async_get_area(self.area_id))
+
+    def _sensors_in_area(self, entity_ids) -> list:
+        """Keep the requested sensors that are configured in this area."""
+        sensors = self.hass.data[const.DOMAIN]["coordinator"].store.async_get_sensors()
+        result = []
+        for entity_id in entity_ids or []:
+            if entity_id not in sensors:
+                _LOGGER.warning(
+                    "Cannot bypass %s: it is not an Alarmo sensor.", entity_id
+                )
+            elif sensors[entity_id].get("area") == self.area_id:
+                if entity_id not in result:
+                    result.append(entity_id)
+        return result
+
+    def _with_requested_bypass(self, bypassed_sensors) -> list:
+        """Merge the requested bypass sensors into a bypass list."""
+        result = list(bypassed_sensors or [])
+        for entity_id in self._bypass_sensors:
+            if entity_id not in result:
+                result.append(entity_id)
+        return result
 
     @property
     def supported_features(self) -> int:
@@ -910,6 +941,24 @@ class AlarmoAreaEntity(AlarmoBaseEntity):
         )
         context_id = kwargs.get("context_id", None)
 
+        # Sensors requested via bypass_sensors are put on the bypass list before
+        # validation, so they are neither checked now nor watched while armed.
+        # Without the kwarg (exit delay timer, re-arm after trigger) the stored
+        # request is kept.
+        previous_bypass = (self.bypassed_sensors, self._bypass_sensors)
+        if const.ATTR_BYPASS_SENSORS in kwargs:
+            self._bypass_sensors = self._sensors_in_area(
+                kwargs[const.ATTR_BYPASS_SENSORS]
+            )
+        if self._bypass_sensors:
+            self.bypassed_sensors = self._with_requested_bypass(self.bypassed_sensors)
+
+        def restore_bypass():
+            (self.bypassed_sensors, self._bypass_sensors) = (
+                previous_bypass[0],
+                previous_bypass[1],
+            )
+
         self._arm_mode = arm_mode
         exit_delay = int(self._config[const.ATTR_MODES][arm_mode]["exit_time"] or 0)
 
@@ -931,12 +980,15 @@ class AlarmoAreaEntity(AlarmoBaseEntity):
                     self._state,
                     arm_mode,
                 )
+                restore_bypass()
                 self.async_arm_failure(open_sensors, context_id=context_id)
                 return False
             else:
                 # proceed the arm
                 if bypassed_sensors:
-                    self.bypassed_sensors = bypassed_sensors
+                    self.bypassed_sensors = self._with_requested_bypass(
+                        bypassed_sensors
+                    )
                 self.open_sensors = open_sensors if open_sensors else None
                 if self.changed_by:
                     _LOGGER.info(
@@ -979,6 +1031,7 @@ class AlarmoAreaEntity(AlarmoBaseEntity):
             if open_sensors and not skip_validation:
                 # there where errors -> abort the arm
                 _LOGGER.warning("Cannot arm right now, there are open sensors")
+                restore_bypass()
                 self.async_arm_failure(open_sensors, context_id=context_id)
                 return False
             else:
@@ -1491,6 +1544,7 @@ class AlarmoMasterEntity(AlarmoBaseEntity):
         """Arm the alarm or switch between arm modes."""
         skip_delay = kwargs.get("skip_delay", False)
         bypass_open_sensors = kwargs.get("bypass_open_sensors", False)
+        bypass_sensors = kwargs.get(const.ATTR_BYPASS_SENSORS, [])
         context_id = kwargs.get("context_id", None)
         self._target_state = arm_mode
 
@@ -1510,6 +1564,7 @@ class AlarmoMasterEntity(AlarmoBaseEntity):
                     arm_mode,
                     skip_delay=skip_delay,
                     bypass_open_sensors=bypass_open_sensors,
+                    bypass_sensors=bypass_sensors,
                 )
                 if not res:
                     open_sensors.update(item.open_sensors)
